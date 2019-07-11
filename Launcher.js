@@ -57,7 +57,7 @@ const snapshotSha = 'master';
 const genesisMemo = 'Genesis';
 const tfAccountMemo = 'Telos Foundation';
 const initVersion = 0;
-const tokenSymbol = 'TLOS';
+const tokenSymbol = 'XEC';
 const maxSupply = '10000000000.0000';
 const actionsPerTransaction = 600;
 const injectionThreadCount = 1;
@@ -976,14 +976,14 @@ class Launcher {
             }
 
             let ethKey = parts[0].trim();
-            let tlosKey = parts[1].trim();
+            let EUCKey = parts[1].trim();
 
-            if (!ethKey || !tlosKey) {
+            if (!ethKey || !EUCKey) {
                 this.log(`Key recovery line had invalid keys: ${line}`);
                 continue;
             }
 
-            keyMap[ethKey.toLowerCase()] = tlosKey;
+            keyMap[ethKey.toLowerCase()] = EUCKey;
         }
 
         return keyMap;
@@ -994,7 +994,7 @@ class Launcher {
         return new Promise(async function(resolve, reject) {
             let accounts = {};
             let snapMeta = {};
-            let genesis = await _this.getSnapshot('tlos_genesis_snapshot.csv');
+            let genesis = await _this.getSnapshot('XEC_genesis_snapshot.csv');
             let recoveredMap = await _this.getRecoveredKeys();
             genesis = genesis.split('\n');
             for (let i = 1; i < genesis.length; i++) {

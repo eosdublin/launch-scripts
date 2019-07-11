@@ -57,7 +57,7 @@ class SnapshotHandler {
         await this.jsonrpc.get_table_rows({
             code: "eosio.token",
             table: "stat",
-            scope: "TLOS"
+            scope: "XEC"
         }).then(res => {
             this.contractSupply = parseFloat(res.rows[0].supply.split(" ")[0]);
         });
@@ -264,7 +264,7 @@ class SnapshotHandler {
             let contractSupply = thisParser.contractSupply.toFixed(4);
             let snapshotSupply = thisParser.snapMeta.total_balance.toFixed(4);
             if (contractSupply != snapshotSupply) {
-                console.error("Contract supply was " + contractSupply + " TLOS and snapshot file had " + snapshotSupply + " TLOS, a difference of " + (thisParser.snapMeta.total_balance - thisParser.contractSupply).toFixed(4) + " TLOS\n\n");
+                console.error("Contract supply was " + contractSupply + " XEC and snapshot file had " + snapshotSupply + " XEC, a difference of " + (thisParser.snapMeta.total_balance - thisParser.contractSupply).toFixed(4) + " XEC\n\n");
             }
         });
     }

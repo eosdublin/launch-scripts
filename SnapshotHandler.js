@@ -7,6 +7,7 @@ const {TextDecoder, TextEncoder} = require('text-encoding');
 const Throttle = require('promise-parallel-throttle');
 const logger = require('single-line-log');
 const log = logger.stdout;
+const util = require('util');
 
 class SnapshotHandler {
 
@@ -57,17 +58,18 @@ class SnapshotHandler {
         await this.jsonrpc.get_table_rows({
             code: "eosio.token",
             table: "stat",
-            scope: "TLOS"
+            scope: "XEC"
         }).then(res => {
             this.contractSupply = parseFloat(res.rows[0].supply.split(" ")[0]);
+            console.log("Total supply: " + this.contractSupply);
         });
     }
 
     checkBalance(acctResult) {
         let acctObj = this.accounts[acctResult.account_name];
-        let liquid = acctResult.core_liquid_balance.split(" ")[0];
-        let cpu = acctResult.total_resources.cpu_weight.split(" ")[0];
-        let net = acctResult.total_resources.net_weight.split(" ")[0];
+        let liquid = typeof(acctResult.core_liquid_balance) == 'undefined' ? 0 : acctResult.core_liquid_balance.split(" ")[0];
+        let cpu = !acctResult.total_resources ? 0 : acctResult.total_resources.cpu_weight.split(" ")[0];
+        let net = !acctResult.total_resources ? 0 : acctResult.total_resources.net_weight.split(" ")[0];
         let liquidFloat = parseFloat(liquid);
         let cpuStakedFloat = parseFloat(cpu);
         let netStakedFloat = parseFloat(net);
@@ -91,6 +93,35 @@ class SnapshotHandler {
                 //log("Checked " + this.balancesChecked + " out of " + this.snapMeta.account_count + " accounts\n");
                 log(cpu + "+" + net + "+" + liquid + "=" + foundBalance + " and expected " + expectedBalance + " for account " + acctResult.account_name + "\nChecked " + this.balancesChecked + " out of " + this.snapMeta.account_count + " accounts\n");
             }
+        }
+    }
+
+    checkPermissions(acctResult) {
+        let acctObj = this.accounts[acctResult.account_name];
+        // console.log(util.inspect(acctResult.permissions, { depth: null }));
+        if (typeof acctResult.privileged !== 'undefined' && acctResult.privileged !== acctObj.privileged) {
+            console.error(acctResult.account_name + " privileged does not match. Expected: " + acctObj.privileged + ". Actual: " + acctResult.privileged);
+        }
+
+        var permissionCount = 0;
+        acctResult.permissions.forEach(permission => {
+            const permissionName = permission.perm_name + '(' + permission.required_auth.threshold + ')';
+            if (permissionName in acctObj.permissions) {
+                permissionCount++;
+                permission.required_auth.accounts.forEach(element => {
+                    if (!acctObj.permissions[permissionName].includes(element.permission.actor + '@' + element.permission.permission)) {
+                        console.error('Permission mismatch. ' + element.permission.actor + '@' + element.permission.permission 
+                            + ' does not exist in ' + acctResult.account_name + ' -> ' + permission.perm_name);
+                    }
+                });
+            }
+            else {
+                console.error('Unexpected permission \'' + permission.perm_name + '\' for account \'' + acctResult.account_name + '\'');
+            }
+        });
+
+        if (permissionCount != Object.keys(acctObj.permissions).length) {
+            console.error('Permission count mismatch. Parsed ' + permissionCount + ', expected ' + acctObj.permissions.length);
         }
     }
 
@@ -152,8 +183,8 @@ class SnapshotHandler {
             data: {
                 from: 'eosio',
                 receiver: accountName,
-                stake_net_quantity: thisAcct.netStake.toFixed(4) + ' TLOS',
-                stake_cpu_quantity: thisAcct.cpuStake.toFixed(4) + ' TLOS',
+                stake_net_quantity: thisAcct.netStake.toFixed(4) + ' XEC',
+                stake_cpu_quantity: thisAcct.cpuStake.toFixed(4) + ' XEC',
                 transfer: true,
             }
         }, {
@@ -166,8 +197,8 @@ class SnapshotHandler {
             data: {
                 from: 'eosio',
                 to: accountName,
-                quantity: thisAcct.liquid.toFixed(4) + ' TLOS',
-                memo: 'TLOS Genesis'
+                quantity: thisAcct.liquid.toFixed(4) + ' XEC',
+                memo: 'XEC Genesis'
             }
         }];
         this.creationActionQueue = this.creationActionQueue.concat(actions);
@@ -204,6 +235,7 @@ class SnapshotHandler {
         let thisParser = this;
         await this.jsonrpc.get_account(accountName).then(acct => {
             this.checkBalance(acct);
+            this.checkPermissions(acct);
         }).catch(err => {
             console.error("Error with accountName: " + accountName + " and error:\n" + err);
         });
@@ -269,46 +301,51 @@ class SnapshotHandler {
             let parts = line.split(',');
             let accountName = parts[2];
             let pubKey = parts[3];
-            let balance = parts[4];
-            
-            if (accountName.length != 12 || pubKey.length != 53) {
-                console.log("CANNOT HANDLE THIS LINE, SKIPPING IT: " + line);
-                return;
+            let liquid = parts[4];
+            let staked = parts[5];
+            let privileged = parts[6] == 'true';
+
+            let permissions = {};
+            if (parts[7]) {
+                parts[7].split(';').forEach(element => {
+                    const parts = element.split(':');
+                    const permissionName = parts[0].includes('(') ? parts[0] : parts[0] + '(1)';
+                    permissions[permissionName] = parts[1]; //.split('/');
+                });
             }
-            
+
+            // if (accountName.length != 12 || pubKey.length != 53) {
+            //     console.log("CANNOT HANDLE THIS LINE, SKIPPING IT: " + line);
+            //     return;
+            // }
+
+            // console.log('Liquid: ' + liquid + ', Staked: ' + staked);
+
             snapMeta.account_count++;
-            let balanceFloat = parseFloat(balance);
+            let stakedFloat = staked ? parseFloat(staked) : 0;
+            let liquidFloat = liquid ? parseFloat(liquid) : 0;
+            let balanceFloat = liquidFloat + stakedFloat + stakedFloat;
             snapMeta.total_balance += balanceFloat;
-
-            let liquid;
-            if (balance <= 3)
-                liquid = .1;
-            else if (balance > 3 && balance <= 11)
-                liquid = 2;
-            else
-                liquid = 10;
-
-
-            let remainder = thisParser.forcePrecision(balance - liquid);
-            let cpuStake = thisParser.forcePrecision(remainder / 2);
-            let netStake = thisParser.forcePrecision(remainder - cpuStake);
 
             if (thisParser.debugAccounts.indexOf(accountName) > -1) {
                 console.log("Account " + accountName + " =========");
-                console.log("balance: " + balance);
-                console.log("remainder: " + remainder);
-                console.log("liquid: " + liquid);
-                console.log("cpuStake: " + cpuStake);
-                console.log("netStake: " + netStake);
+                console.log("balance: " + balanceFloat);
+                console.log("liquid: " + liquidFloat);
+                console.log("cpuStake: " + stakedFloat);
+                console.log("netStake: " + stakedFloat);
+                console.log("privileged: " + privileged);
+                console.log("permissions: " + permissions);
             }
 
             accounts[accountName] = {
-                liquid: liquid,
+                liquid: liquidFloat,
                 balance: balanceFloat,
                 accountName: accountName,
                 pubKey: pubKey,
-                cpuStake: cpuStake,
-                netStake: netStake
+                cpuStake: stakedFloat,
+                netStake: stakedFloat,
+                privileged: privileged,
+                permissions: permissions
             };
 
         });
@@ -330,7 +367,7 @@ class SnapshotHandler {
             let contractSupply = thisParser.contractSupply.toFixed(4);
             let snapshotSupply = thisParser.snapMeta.total_balance.toFixed(4);
             if (contractSupply != snapshotSupply) {
-                console.error("Contract supply was " + contractSupply + " TLOS and snapshot file had " + snapshotSupply + " TLOS, a difference of " + (thisParser.snapMeta.total_balance - thisParser.contractSupply).toFixed(4) + " TLOS\n\n");
+                console.error("Contract supply was " + contractSupply + " XEC and snapshot file had " + snapshotSupply + " XEC, a difference of " + (thisParser.snapMeta.total_balance - thisParser.contractSupply).toFixed(4) + " XEC\n\n");
             }
         });
     }
