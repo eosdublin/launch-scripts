@@ -976,14 +976,14 @@ class Launcher {
             }
 
             let ethKey = parts[0].trim();
-            let EUCKey = parts[1].trim();
+            let XECKey = parts[1].trim();
 
-            if (!ethKey || !EUCKey) {
+            if (!ethKey || !XECKey) {
                 this.log(`Key recovery line had invalid keys: ${line}`);
                 continue;
             }
 
-            keyMap[ethKey.toLowerCase()] = EUCKey;
+            keyMap[ethKey.toLowerCase()] = XECKey;
         }
 
         return keyMap;

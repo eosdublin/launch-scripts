@@ -105,13 +105,24 @@ class SnapshotHandler {
 
         var permissionCount = 0;
         acctResult.permissions.forEach(permission => {
+            permissionCount++;
             const permissionName = permission.perm_name + '(' + permission.required_auth.threshold + ')';
             if (permissionName in acctObj.permissions) {
-                permissionCount++;
+                let authCount = 0;
                 permission.required_auth.accounts.forEach(element => {
                     if (!acctObj.permissions[permissionName].includes(element.permission.actor + '@' + element.permission.permission)) {
-                        console.error('Permission mismatch. ' + element.permission.actor + '@' + element.permission.permission 
-                            + ' does not exist in ' + acctResult.account_name + ' -> ' + permission.perm_name);
+                        console.error('Unexpected permission ' + element.permission.actor + '@' + element.permission.permission 
+                            + ' in ' + acctResult.account_name + ' -> ' + permission.perm_name);
+                    }
+                    else {
+                        authCount++;
+                    }
+                });
+
+                permission.required_auth.keys.forEach(key => {
+                    if (!acctObj.permissions[permissionName].includes(key.key)) {
+                        console.error('Unexpcted permission: ' + key.key 
+                            + ' should not exist in ' + acctResult.account_name + ' -> ' + permission.perm_name);
                     }
                 });
             }
@@ -299,15 +310,15 @@ class SnapshotHandler {
 
         rl.on('line', async function(line) {
             let parts = line.split(',');
-            let accountName = parts[2];
-            let pubKey = parts[3];
-            let liquid = parts[4];
-            let staked = parts[5];
-            let privileged = parts[6] == 'true';
+            let accountName = parts[1];
+            let pubKey = parts[2];
+            let liquid = parts[3];
+            let staked = parts[4];
+            let privileged = parts[5] == 'true';
 
             let permissions = {};
-            if (parts[7]) {
-                parts[7].split(';').forEach(element => {
+            if (parts[6]) {
+                parts[6].split(';').forEach(element => {
                     const parts = element.split(':');
                     const permissionName = parts[0].includes('(') ? parts[0] : parts[0] + '(1)';
                     permissions[permissionName] = parts[1]; //.split('/');
